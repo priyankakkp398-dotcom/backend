@@ -146,17 +146,37 @@ const updateReferralBonus = async (req, res) => {
   }
 };
 
+const getGameSettings = async (req, res) => {
+  try {
+    const engine = req.app.locals.gameEngine;
+    const result = await query('SELECT speed FROM game_settings LIMIT 1');
+    const dbSpeed = result.rows.length > 0 ? parseFloat(result.rows[0].speed) : null;
+    res.json({ success: true, data: { speed: dbSpeed ?? engine.speed } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch game settings' });
+  }
+};
+
 const updateGameSettings = async (req, res) => {
   try {
     const { speed } = req.body;
-    const engine = req.app.locals.gameEngine;
-    if (speed) {
-      engine.setSpeed(parseFloat(speed));
+    if (speed === undefined || speed === null) {
+      return res.status(400).json({ success: false, message: 'Speed is required' });
     }
-    res.json({ success: true, message: 'Game settings updated' });
+    const parsed = parseFloat(speed);
+    if (isNaN(parsed) || parsed < 0) {
+      return res.status(400).json({ success: false, message: 'Speed must be a non-negative number' });
+    }
+    const engine = req.app.locals.gameEngine;
+    engine.setSpeed(parsed);
+    await query(
+      'INSERT INTO game_settings (id, speed) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET speed = $1',
+      [parsed]
+    );
+    res.json({ success: true, message: 'Game settings updated', data: { speed: parsed } });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to update game settings' });
   }
 };
 
-module.exports = { login, getDashboard, getUsers, banUser, editBalance, getPaymentSettings, updatePaymentSettings, updateReferralBonus, updateGameSettings };
+module.exports = { login, getDashboard, getUsers, banUser, editBalance, getPaymentSettings, updatePaymentSettings, updateReferralBonus, getGameSettings, updateGameSettings };

@@ -74,6 +74,17 @@ app.get('/api/payment-info', async (req, res) => {
 const gameEngine = new GameEngine();
 gameEngine.setIO(io);
 app.locals.gameEngine = gameEngine;
+
+query('SELECT speed FROM game_settings LIMIT 1').then(result => {
+  if (result.rows.length > 0) {
+    const dbSpeed = parseFloat(result.rows[0].speed);
+    if (!isNaN(dbSpeed) && dbSpeed >= 0) {
+      gameEngine.setSpeed(dbSpeed);
+      console.log(`Game speed loaded from DB: ${dbSpeed}`);
+    }
+  }
+}).catch(err => console.error('Failed to load game speed from DB:', err));
+
 gameEngine.startLoop();
 
 io.on('connection', (socket) => {

@@ -127,6 +127,19 @@ const createTables = async () => {
       );
     `);
 
+    await query(`
+      CREATE TABLE IF NOT EXISTS game_settings (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        speed DECIMAL(10,4) NOT NULL DEFAULT 0.06,
+        CHECK (id = 1)
+      );
+    `);
+
+    await query(`
+      INSERT INTO game_settings (id, speed) VALUES (1, 0.06)
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
     await query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
     await query(`CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile);`);
     await query(`CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);`);

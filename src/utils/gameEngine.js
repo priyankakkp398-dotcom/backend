@@ -329,6 +329,7 @@ class GameEngine {
       state: this.state,
       multiplier: this.multiplier,
       crashMultiplier: this.crashPoint,
+      speed: this.speed,
       roundId: this.currentRound?.id || null,
       roundHash: this.currentRound?.hash || null,
       countdown: this.waitStart ? Math.max(0, Math.ceil((this.waitDuration - (Date.now() - this.waitStart)) / 1000)) : 0,
