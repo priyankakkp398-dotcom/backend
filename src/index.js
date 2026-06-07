@@ -81,18 +81,41 @@ query(`
   CREATE TABLE IF NOT EXISTS game_settings (
     id INTEGER PRIMARY KEY DEFAULT 1,
     speed DECIMAL(10,4) NOT NULL DEFAULT 0.06,
+    rtp DECIMAL(5,2) NOT NULL DEFAULT 94.00,
+    low_crash_frequency DECIMAL(5,2) NOT NULL DEFAULT 25.00,
+    high_multiplier_frequency DECIMAL(5,2) NOT NULL DEFAULT 2.00,
     CHECK (id = 1)
   )
 `).then(() => {
-  return query('INSERT INTO game_settings (id, speed) VALUES (1, 0.06) ON CONFLICT (id) DO NOTHING');
+  return query('INSERT INTO game_settings (id, speed, rtp, low_crash_frequency, high_multiplier_frequency) VALUES (1, 0.06, 94.00, 25.00, 2.00) ON CONFLICT (id) DO NOTHING');
 }).then(() => {
-  return query('SELECT speed FROM game_settings LIMIT 1');
+  return query('ALTER TABLE game_settings ADD COLUMN IF NOT EXISTS rtp DECIMAL(5,2) DEFAULT 94.00').catch(() => {});
+}).then(() => {
+  return query('ALTER TABLE game_settings ADD COLUMN IF NOT EXISTS low_crash_frequency DECIMAL(5,2) DEFAULT 25.00').catch(() => {});
+}).then(() => {
+  return query('ALTER TABLE game_settings ADD COLUMN IF NOT EXISTS high_multiplier_frequency DECIMAL(5,2) DEFAULT 2.00').catch(() => {});
+}).then(() => {
+  return query('SELECT speed, rtp, low_crash_frequency, high_multiplier_frequency FROM game_settings LIMIT 1');
 }).then(result => {
   if (result.rows.length > 0) {
-    const dbSpeed = parseFloat(result.rows[0].speed);
+    const row = result.rows[0];
+    const dbSpeed = parseFloat(row.speed);
     if (!isNaN(dbSpeed) && dbSpeed >= 0) {
       gameEngine.setSpeed(dbSpeed);
       console.log(`Game speed loaded from DB: ${dbSpeed}`);
+    }
+    const dbRtp = parseFloat(row.rtp);
+    if (!isNaN(dbRtp) && dbRtp >= 80 && dbRtp <= 99) {
+      gameEngine.setRtp(dbRtp);
+      console.log(`RTP loaded from DB: ${dbRtp}%`);
+    }
+    const dbLowFreq = parseFloat(row.low_crash_frequency);
+    if (!isNaN(dbLowFreq)) {
+      gameEngine.setLowCrashFrequency(dbLowFreq);
+    }
+    const dbHighFreq = parseFloat(row.high_multiplier_frequency);
+    if (!isNaN(dbHighFreq)) {
+      gameEngine.setHighMultiplierFrequency(dbHighFreq);
     }
   }
 }).catch(err => console.error('Game settings init error:', err.message));

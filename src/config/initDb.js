@@ -131,14 +131,21 @@ const createTables = async () => {
       CREATE TABLE IF NOT EXISTS game_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,
         speed DECIMAL(10,4) NOT NULL DEFAULT 0.06,
+        rtp DECIMAL(5,2) NOT NULL DEFAULT 94.00,
+        low_crash_frequency DECIMAL(5,2) NOT NULL DEFAULT 25.00,
+        high_multiplier_frequency DECIMAL(5,2) NOT NULL DEFAULT 2.00,
         CHECK (id = 1)
       );
     `);
 
     await query(`
-      INSERT INTO game_settings (id, speed) VALUES (1, 0.06)
+      INSERT INTO game_settings (id, speed, rtp, low_crash_frequency, high_multiplier_frequency) VALUES (1, 0.06, 94.00, 25.00, 2.00)
       ON CONFLICT (id) DO NOTHING;
     `);
+
+    await query(`ALTER TABLE game_settings ADD COLUMN IF NOT EXISTS rtp DECIMAL(5,2) DEFAULT 94.00;`).catch(() => {});
+    await query(`ALTER TABLE game_settings ADD COLUMN IF NOT EXISTS low_crash_frequency DECIMAL(5,2) DEFAULT 25.00;`).catch(() => {});
+    await query(`ALTER TABLE game_settings ADD COLUMN IF NOT EXISTS high_multiplier_frequency DECIMAL(5,2) DEFAULT 2.00;`).catch(() => {});
 
     await query(`
       CREATE TABLE IF NOT EXISTS support_settings (

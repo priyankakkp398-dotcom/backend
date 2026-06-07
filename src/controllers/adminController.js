@@ -149,9 +149,18 @@ const updateReferralBonus = async (req, res) => {
 const getGameSettings = async (req, res) => {
   try {
     const engine = req.app.locals.gameEngine;
-    const result = await query('SELECT speed FROM game_settings LIMIT 1');
-    const dbSpeed = result.rows.length > 0 ? parseFloat(result.rows[0].speed) : null;
-    res.json({ success: true, data: { speed: dbSpeed ?? engine.speed } });
+    const result = await query('SELECT speed, rtp, low_crash_frequency, high_multiplier_frequency FROM game_settings LIMIT 1');
+    if (result.rows.length > 0) {
+      const row = result.rows[0];
+      res.json({ success: true, data: {
+        speed: parseFloat(row.speed),
+        rtp: parseFloat(row.rtp),
+        lowCrashFrequency: parseFloat(row.low_crash_frequency),
+        highMultiplierFrequency: parseFloat(row.high_multiplier_frequency)
+      }});
+    } else {
+      res.json({ success: true, data: { speed: engine.speed, rtp: engine.rtp, lowCrashFrequency: engine.lowCrashFrequency, highMultiplierFrequency: engine.highMultiplierFrequency } });
+    }
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to fetch game settings' });
   }
@@ -159,22 +168,43 @@ const getGameSettings = async (req, res) => {
 
 const updateGameSettings = async (req, res) => {
   try {
-    const { speed } = req.body;
-    if (speed === undefined || speed === null) {
-      return res.status(400).json({ success: false, message: 'Speed is required' });
-    }
-    const parsed = parseFloat(speed);
-    if (isNaN(parsed) || parsed < 0) {
-      return res.status(400).json({ success: false, message: 'Speed must be a non-negative number' });
-    }
+    const { speed, rtp, lowCrashFrequency, highMultiplierFrequency } = req.body;
     const engine = req.app.locals.gameEngine;
-    engine.setSpeed(parsed);
+
+    if (speed !== undefined && speed !== null) {
+      const parsed = parseFloat(speed);
+      if (isNaN(parsed) || parsed < 0) return res.status(400).json({ success: false, message: 'Speed must be a non-negative number' });
+      engine.setSpeed(parsed);
+    }
+    if (rtp !== undefined && rtp !== null) {
+      const parsed = parseFloat(rtp);
+      if (isNaN(parsed) || parsed < 80 || parsed > 99) return res.status(400).json({ success: false, message: 'RTP must be 80-99' });
+      engine.setRtp(parsed);
+    }
+    if (lowCrashFrequency !== undefined && lowCrashFrequency !== null) {
+      const parsed = parseFloat(lowCrashFrequency);
+      if (isNaN(parsed) || parsed < 5 || parsed > 50) return res.status(400).json({ success: false, message: 'Low crash frequency must be 5-50' });
+      engine.setLowCrashFrequency(parsed);
+    }
+    if (highMultiplierFrequency !== undefined && highMultiplierFrequency !== null) {
+      const parsed = parseFloat(highMultiplierFrequency);
+      if (isNaN(parsed) || parsed < 0.5 || parsed > 10) return res.status(400).json({ success: false, message: 'High multiplier frequency must be 0.5-10' });
+      engine.setHighMultiplierFrequency(parsed);
+    }
+
     await query(
-      'INSERT INTO game_settings (id, speed) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET speed = $1',
-      [parsed]
+      `UPDATE game_settings SET speed = $1, rtp = $2, low_crash_frequency = $3, high_multiplier_frequency = $4 WHERE id = 1`,
+      [engine.speed, engine.rtp, engine.lowCrashFrequency, engine.highMultiplierFrequency]
     );
-    res.json({ success: true, message: 'Game settings updated', data: { speed: parsed } });
+
+    res.json({ success: true, message: 'Game settings updated', data: {
+      speed: engine.speed,
+      rtp: engine.rtp,
+      lowCrashFrequency: engine.lowCrashFrequency,
+      highMultiplierFrequency: engine.highMultiplierFrequency
+    }});
   } catch (err) {
+    console.error('Game settings update error:', err);
     res.status(500).json({ success: false, message: 'Failed to update game settings' });
   }
 };

@@ -21,6 +21,14 @@ class GameEngine {
     this.countdownInterval = null;
     this.waitDuration = 20000;
     this.crashedBets = [];
+    this.rtp = 94.00;
+    this.lowCrashFrequency = 25.00;
+    this.highMultiplierFrequency = 2.00;
+    this.totalBetsAmount = 0;
+    this.totalPayoutAmount = 0;
+    this.roundsPlayed = 0;
+    this.lowCrashRounds = 0;
+    this.lastFakeWins = [];
   }
 
   setIO(io) {
@@ -35,15 +43,28 @@ class GameEngine {
     this.startWaitingPeriod();
   }
 
+  getRtpBias() {
+    if (this.totalBetsAmount <= 0) return 0;
+    const actualRtp = this.totalPayoutAmount / this.totalBetsAmount;
+    const targetRtp = this.rtp / 100;
+    if (actualRtp < targetRtp - 0.02) return -0.15;
+    if (actualRtp < targetRtp - 0.01) return -0.08;
+    if (actualRtp > targetRtp + 0.02) return 0.10;
+    if (actualRtp > targetRtp + 0.01) return 0.05;
+    return 0;
+  }
+
   startWaitingPeriod() {
     this.state = 'waiting';
     this.multiplier = 1.00;
-    this.crashPoint = generateCrashPoint();
+    const bias = this.getRtpBias();
+    this.crashPoint = generateCrashPoint(bias);
     const hash = generateRoundHash(Date.now().toString());
     this.currentRound = { id: null, hash, crashMultiplier: this.crashPoint };
     this.activeBets.clear();
     this.userBets.clear();
     this.crashedBets = [];
+    this.lastFakeWins = [];
     this.waitStart = Date.now();
     this.waitingElapsed = 0;
 
@@ -95,10 +116,17 @@ class GameEngine {
         return;
       }
 
+      const highMultiplierAlerts = [];
+      if (this.multiplier >= 5 && this.multiplier < 5.05) highMultiplierAlerts.push('glow');
+      if (this.multiplier >= 10 && this.multiplier < 10.1) highMultiplierAlerts.push('gold');
+      if (this.multiplier >= 25 && this.multiplier < 25.1) highMultiplierAlerts.push('lightning');
+      if (this.multiplier >= 50 && this.multiplier < 50.5) highMultiplierAlerts.push('epic');
+
       this.emit('game:tick', {
         multiplier: this.multiplier,
         roundId: this.currentRound.id,
-        activeBetCount: this.activeBets.size
+        activeBetCount: this.activeBets.size,
+        alerts: highMultiplierAlerts.length > 0 ? highMultiplierAlerts : undefined
       });
     }, 50);
   }
@@ -116,8 +144,14 @@ class GameEngine {
     const cashoutMultiplier = this.multiplier;
     const payout = parseFloat((bet.amount * cashoutMultiplier).toFixed(2));
 
-    try {
-      const userResult = await query('SELECT balance FROM users WHERE id = $1', [bet.userId]);
+    this.totalBetsAmount += bet.amount;
+    this.totalPayoutAmount += payout;
+    if (this.totalBetsAmount > 10000000) {
+      this.totalBetsAmount *= 0.5;
+      this.totalPayoutAmount *= 0.5;
+    }
+
+    const userResult = await query('SELECT balance FROM users WHERE id = $1', [bet.userId]);
       const oldBalance = parseFloat(userResult.rows[0].balance);
       const newBalance = oldBalance + payout;
 
@@ -151,6 +185,15 @@ class GameEngine {
     if (this.timer) clearInterval(this.timer);
     const crashMult = this.multiplier;
 
+    this.roundsPlayed++;
+    if (this.crashPoint < 2) this.lowCrashRounds++;
+    const actualLowFreq = this.roundsPlayed > 0 ? (this.lowCrashRounds / this.roundsPlayed) * 100 : 0;
+    const targetLowFreq = this.lowCrashFrequency;
+
+    // Track losses for RTP
+    let roundBetsTotal = 0;
+    let roundPayoutTotal = 0;
+
     try {
       await query(
         'UPDATE game_rounds SET status = $1, crashed_at = NOW() WHERE id = $2',
@@ -160,11 +203,13 @@ class GameEngine {
       console.error('Game round update error:', err);
     }
 
+    const fakeWins = [];
     const losers = [];
     for (const [betKey, bet] of this.activeBets) {
       if (bet.status === 'pending') {
         bet.status = 'lost';
         bet.payout = 0;
+        roundBetsTotal += bet.amount;
         losers.push({ userId: bet.userId, amount: bet.amount });
         try {
           await query(
@@ -176,7 +221,30 @@ class GameEngine {
         } catch (err) {
           console.error('Bet settle error:', err);
         }
+      } else if (bet.status === 'cashed_out') {
+        roundBetsTotal += bet.amount;
+        roundPayoutTotal += bet.payout;
       }
+    }
+
+    // Generate fake wins for excitement if crash is 5x+
+    if (crashMult >= 5) {
+      const fakeWinCount = crashMult >= 25 ? 2 : 1;
+      for (let i = 0; i < fakeWinCount; i++) {
+        const fakeNames = ['1***a', '2***b', '3***c', '4***d', '5***e', '6***f', '7***g', '8***h'];
+        const name = fakeNames[Math.floor(Math.random() * fakeNames.length)];
+        const betAmt = Math.round(100 + Math.random() * 5000);
+        const winAmt = Math.round(betAmt * crashMult);
+        fakeWins.push({ name, amount: winAmt, multiplier: crashMult, bet: betAmt });
+      }
+    }
+
+    this.lastFakeWins = fakeWins;
+    this.totalBetsAmount += roundBetsTotal;
+    this.totalPayoutAmount += roundPayoutTotal;
+    if (this.totalBetsAmount > 10000000) {
+      this.totalBetsAmount *= 0.5;
+      this.totalPayoutAmount *= 0.5;
     }
 
     this.roundHistory.unshift({
@@ -191,7 +259,8 @@ class GameEngine {
       crashMultiplier: crashMult,
       roundId: this.currentRound.id,
       roundHash: this.currentRound.hash,
-      losers
+      losers,
+      fakeWins
     });
 
     setTimeout(() => this.startWaitingPeriod(), 4000);
@@ -330,16 +399,30 @@ class GameEngine {
       multiplier: this.multiplier,
       crashMultiplier: this.crashPoint,
       speed: this.speed,
+      rtp: this.rtp,
       roundId: this.currentRound?.id || null,
       roundHash: this.currentRound?.hash || null,
       countdown: this.waitStart ? Math.max(0, Math.ceil((this.waitDuration - (Date.now() - this.waitStart)) / 1000)) : 0,
       activeBetCount: this.activeBets.size,
-      history: this.roundHistory.slice(0, 20)
+      history: this.roundHistory.slice(0, 20),
+      fakeWins: this.lastFakeWins
     };
   }
 
   setSpeed(newSpeed) {
     this.speed = newSpeed;
+  }
+
+  setRtp(newRtp) {
+    this.rtp = newRtp;
+  }
+
+  setLowCrashFrequency(freq) {
+    this.lowCrashFrequency = freq;
+  }
+
+  setHighMultiplierFrequency(freq) {
+    this.highMultiplierFrequency = freq;
   }
 
   getActiveBetsCount() {
