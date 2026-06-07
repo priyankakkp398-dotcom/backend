@@ -36,7 +36,8 @@ const corsOptions = {
 };
 
 const io = new Server(server, {
-  cors: corsOptions
+  cors: corsOptions,
+  path: '/api/socket.io'
 });
 
 const PORT = process.env.PORT || 5000;
