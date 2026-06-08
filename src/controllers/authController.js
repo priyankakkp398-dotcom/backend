@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/database');
 const { generateReferralCode, generateOTP } = require('../utils/helpers');
+const { sendOtpEmail } = require('../utils/mailer');
 
 const otpStore = new Map();
 
@@ -84,9 +85,13 @@ const forgotPassword = async (req, res) => {
 
     const otp = generateOTP();
     otpStore.set(email, { otp, expiresAt: Date.now() + 600000 });
-    console.log(`OTP for ${email}: ${otp}`);
 
-    res.json({ success: true, message: 'OTP sent to email', data: { otp } });
+    const sent = await sendOtpEmail(email, otp);
+    if (!sent) {
+      console.log(`OTP for ${email}: ${otp}`);
+    }
+
+    res.json({ success: true, message: 'If this email is registered, an OTP has been sent.' });
   } catch (err) {
     console.error('Forgot password error:', err);
     res.status(500).json({ success: false, message: 'Failed to process request' });
