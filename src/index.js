@@ -42,6 +42,7 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 5000;
 
+app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
