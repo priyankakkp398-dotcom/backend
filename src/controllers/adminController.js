@@ -222,4 +222,34 @@ const updateSupport = async (req, res) => {
   }
 };
 
-module.exports = { login, getDashboard, getUsers, banUser, editBalance, getPaymentSettings, updatePaymentSettings, updateReferralBonus, getGameSettings, updateGameSettings, updateSupport };
+const resetData = async (req, res) => {
+  try {
+    await query('DELETE FROM transactions');
+    await query('DELETE FROM bets');
+    await query('DELETE FROM withdrawals');
+    await query('DELETE FROM deposits');
+    await query('DELETE FROM referrals');
+    await query('DELETE FROM bank_accounts');
+    await query('DELETE FROM users');
+    await query('DELETE FROM game_rounds');
+
+    const engine = req.app.locals.gameEngine;
+    if (engine) {
+      engine.activeBets.clear();
+      engine.userBets.clear();
+      engine.roundHistory = [];
+      engine.crashedBets = [];
+      engine.totalBetsAmount = 0;
+      engine.totalPayoutAmount = 0;
+      engine.roundsPlayed = 0;
+      engine.lowCrashRounds = 0;
+    }
+
+    res.json({ success: true, message: 'All user data has been reset successfully' });
+  } catch (err) {
+    console.error('Reset data error:', err);
+    res.status(500).json({ success: false, message: 'Failed to reset data' });
+  }
+};
+
+module.exports = { login, getDashboard, getUsers, banUser, editBalance, getPaymentSettings, updatePaymentSettings, updateReferralBonus, getGameSettings, updateGameSettings, updateSupport, resetData };

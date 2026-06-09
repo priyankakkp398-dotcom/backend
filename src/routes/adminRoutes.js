@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { login, getDashboard, getUsers, banUser, editBalance, getPaymentSettings, updatePaymentSettings, updateReferralBonus, getGameSettings, updateGameSettings, updateSupport } = require('../controllers/adminController');
+const { login, getDashboard, getUsers, banUser, editBalance, getPaymentSettings, updatePaymentSettings, updateReferralBonus, getGameSettings, updateGameSettings, updateSupport, resetData } = require('../controllers/adminController');
 const { adminAuth } = require('../middleware/auth');
 
 router.post('/login', login);
@@ -13,5 +13,6 @@ router.put('/referral-bonus', adminAuth, updateReferralBonus);
 router.get('/game-settings', adminAuth, getGameSettings);
 router.put('/game-settings', adminAuth, updateGameSettings);
 router.put('/support-settings', adminAuth, updateSupport);
+router.post('/reset-data', adminAuth, resetData);
 
 module.exports = router;
