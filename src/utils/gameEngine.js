@@ -275,7 +275,7 @@ class GameEngine {
     const userResult = await query('SELECT balance FROM users WHERE id = $1', [userId]);
     if (userResult.rows.length === 0) throw new Error('User not found');
     if (parseFloat(userResult.rows[0].balance) < amount) throw new Error('Insufficient balance');
-    if (amount < 100) throw new Error('Minimum bet is ₹100');
+    if (amount < 10) throw new Error('Minimum bet is ₹10');
 
     const userBetKeys = this.userBets.get(userId) || [];
     if (userBetKeys.length >= 1) throw new Error('Maximum 1 bet per round');
