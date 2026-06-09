@@ -29,6 +29,7 @@ class GameEngine {
     this.roundsPlayed = 0;
     this.lowCrashRounds = 0;
     this.lastFakeWins = [];
+    this.betLocks = new Map();
   }
 
   setIO(io) {
@@ -270,59 +271,67 @@ class GameEngine {
   }
 
   async placeBet(userId, amount, autoCashoutAt = null) {
-    if (this.state !== 'waiting') {
-      throw new Error('Game not accepting bets');
+    if (this.betLocks.get(userId)) {
+      throw new Error('Bet already in progress');
     }
+    this.betLocks.set(userId, true);
+    try {
+      if (this.state !== 'waiting') {
+        throw new Error('Game not accepting bets');
+      }
 
-    const userResult = await query('SELECT balance FROM users WHERE id = $1', [userId]);
-    if (userResult.rows.length === 0) throw new Error('User not found');
-    if (parseFloat(userResult.rows[0].balance) < amount) throw new Error('Insufficient balance');
-    if (amount < 10) throw new Error('Minimum bet is ₹10');
+      const userResult = await query('SELECT balance FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length === 0) throw new Error('User not found');
+      if (parseFloat(userResult.rows[0].balance) < amount) throw new Error('Insufficient balance');
+      if (amount < 10) throw new Error('Minimum bet is ₹10');
 
-    const userBetKeys = this.userBets.get(userId) || [];
-    if (userBetKeys.length >= 1) throw new Error('Maximum 1 bet per round');
+      const userBetKeys = this.userBets.get(userId) || [];
+      if (userBetKeys.length >= 1) throw new Error('Maximum 1 bet per round');
 
-    const gameRoundId = this.currentRound ? this.currentRound.id || (await query(
-      'SELECT id FROM game_rounds ORDER BY created_at DESC LIMIT 1'
-    )).rows[0]?.id : null;
+      const gameRoundId = this.currentRound ? this.currentRound.id || (await query(
+        'SELECT id FROM game_rounds ORDER BY created_at DESC LIMIT 1'
+      )).rows[0]?.id : null;
 
-    if (!gameRoundId) throw new Error('No active game round');
+      if (!gameRoundId) throw new Error('No active game round');
 
-    const newBalance = parseFloat(userResult.rows[0].balance) - amount;
-    await query('UPDATE users SET balance = $1 WHERE id = $2', [newBalance, userId]);
+      const newBalance = parseFloat(userResult.rows[0].balance) - amount;
+      await query('UPDATE users SET balance = $1 WHERE id = $2', [newBalance, userId]);
 
-    const betResult = await query(
-      'INSERT INTO bets (user_id, round_id, amount, status) VALUES ($1, $2, $3, $4) RETURNING id',
-      [userId, gameRoundId, amount, 'pending']
-    );
+      const betResult = await query(
+        'INSERT INTO bets (user_id, round_id, amount, status) VALUES ($1, $2, $3, $4) RETURNING id',
+        [userId, gameRoundId, amount, 'pending']
+      );
 
-    await this.recordTransaction(userId, 'bet', amount,
-      `Bet placed - ₹${amount}`, parseFloat(userResult.rows[0].balance), newBalance);
+      await this.recordTransaction(userId, 'bet', amount,
+        `Bet placed - ₹${amount}`, parseFloat(userResult.rows[0].balance), newBalance);
 
-    const betKey = `${userId}-${betResult.rows[0].id}`;
-    const bet = {
-      id: betResult.rows[0].id,
-      userId,
-      amount,
-      status: 'pending',
-      cashOutAt: null,
-      payout: null,
-      roundId: gameRoundId,
-      autoCashoutAt: autoCashoutAt
-    };
+      const betKey = `${userId}-${betResult.rows[0].id}`;
+      const bet = {
+        id: betResult.rows[0].id,
+        userId,
+        amount,
+        status: 'pending',
+        cashOutAt: null,
+        payout: null,
+        roundId: gameRoundId,
+        autoCashoutAt: autoCashoutAt
+      };
 
-    this.activeBets.set(betKey, bet);
-    userBetKeys.push(betKey);
-    this.userBets.set(userId, userBetKeys);
+      this.activeBets.set(betKey, bet);
+      userBetKeys.push(betKey);
+      this.userBets.set(userId, userBetKeys);
 
-    this.emit('game:bet', {
-      userId,
-      amount,
-      betId: bet.id,
-      autoCashoutAt
-    });
+      this.emit('game:bet', {
+        userId,
+        amount,
+        betId: bet.id,
+        autoCashoutAt
+      });
 
-    return { betId: bet.id, balance: newBalance };
+      return { betId: bet.id, balance: newBalance };
+    } finally {
+      this.betLocks.delete(userId);
+    }
   }
 
   async cashOut(userId, betId = null) {
