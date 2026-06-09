@@ -1,34 +1,27 @@
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
-let transporter = null;
+let initialized = false;
 
-function getTransporter() {
-  if (transporter) return transporter;
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) {
-    console.warn('[Mailer] SMTP not configured — emails will not be sent. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
-    return null;
+function init() {
+  if (initialized) return true;
+  const apiKey = process.env.SMTP_PASS;
+  if (!apiKey) {
+    console.warn('[Mailer] SendGrid API key not found in SMTP_PASS');
+    return false;
   }
-  transporter = nodemailer.createTransport({
-    host,
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_PORT === '465',
-    auth: { user, pass },
-  });
-  return transporter;
+  sgMail.setApiKey(apiKey);
+  initialized = true;
+  return true;
 }
 
 async function sendOtpEmail(to, otp) {
-  const t = getTransporter();
-  if (!t) return false;
+  if (!init()) return false;
   const siteName = process.env.SITE_NAME || 'Paisa Hi Paisa';
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = process.env.SMTP_FROM || 'paisahipaisa034@gmail.com';
   try {
-    await t.sendMail({
-      from: `"${siteName}" <${from}>`,
+    await sgMail.send({
       to,
+      from,
       subject: `Password Reset OTP — ${siteName}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#0a0a0a;color:#fff;border-radius:12px">
@@ -47,7 +40,10 @@ async function sendOtpEmail(to, otp) {
     });
     return true;
   } catch (err) {
-    console.error('[Mailer] Failed to send email:', err.message);
+    console.error('[Mailer] SendGrid error:', err.message);
+    if (err.response) {
+      console.error('[Mailer] SendGrid response body:', err.response.body);
+    }
     return false;
   }
 }
