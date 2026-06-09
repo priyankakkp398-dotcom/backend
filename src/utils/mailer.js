@@ -5,7 +5,7 @@ let initialized = false;
 function init() {
   if (initialized) return true;
   const apiKey = process.env.SMTP_PASS;
-  if (!apiKey) {
+  if (!apiKey || !apiKey.startsWith('SG.')) {
     console.warn('[Mailer] SendGrid API key not found in SMTP_PASS');
     return false;
   }
@@ -38,11 +38,12 @@ async function sendOtpEmail(to, otp) {
         </div>
       `,
     });
+    console.log(`[Mailer] Email sent to ${to} via SendGrid`);
     return true;
   } catch (err) {
     console.error('[Mailer] SendGrid error:', err.message);
-    if (err.response) {
-      console.error('[Mailer] SendGrid response body:', err.response.body);
+    if (err.response && err.response.body) {
+      console.error('[Mailer] SendGrid details:', JSON.stringify(err.response.body, null, 2));
     }
     return false;
   }
