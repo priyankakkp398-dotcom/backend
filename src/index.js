@@ -17,6 +17,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const supportRoutes = require('./routes/supportRoutes');
 const { GameEngine } = require('./utils/gameEngine');
 const { query } = require('./config/database');
+const { startKeepAlive } = require('./utils/keepAlive');
 
 const app = express();
 const server = http.createServer(app);
@@ -140,6 +141,7 @@ app.use((err, req, res, next) => {
 if (process.env.NODE_ENV !== 'test') {
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    startKeepAlive();
   });
 }
 

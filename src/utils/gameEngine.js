@@ -264,6 +264,8 @@ class GameEngine {
       fakeWins
     });
 
+    this.emit('game:state', this.getState());
+
     setTimeout(() => this.startWaitingPeriod(), 4000);
   }
 
